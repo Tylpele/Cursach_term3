@@ -35,13 +35,17 @@ storage = MemoryStorage() # доступ к опративки в целом д�
 
 class State(StatesGroup):
     waiting_add_url= State()
+    waiting_delete_url=State()
 
 # команда /start
 @dp.message_handler(commands=['start'])
 async def begin(message: types.Message):
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, selective=True) #cоздание кнопки
     btn_add = types.KeyboardButton("Добавить товар") #текст кнопки
+    btn_delete = types.KeyboardButton("Удалить товар")
+    btn_watch_product=types.KeyboardButton("Посмотреть товары")
     keyboard.add(btn_add) #добавление кнопки на клавиатуру
+    keyboard.add(btn_delete, btn_watch_product)
     await bot.send_message(message.chat.id, "Привет!\n"
                                             "\n"
                                             "Этот бот поможет вам отслеживать изменение цен на товары. Нажмите \"Добавить товар\",\n"
@@ -110,6 +114,30 @@ async def add_product(message: types.Message, state: FSMContext): #НЕ ТРОГ
     await message.answer("Товар добавлен") #сообщение об успешной записи куда-то
     await state.finish() #завершения состояния НЕ ТРОГАТЬ
 
+
+@dp.message_handler(lambda message: message.text == "Удалить товар")
+async def state_add_url(message: types.Message, state: FSMContext):
+    await message.reply("Какой товар вы хотите перестать отслеживать?")
+    await state.set_state(State.waiting_delete_url.state)
+
+
+@dp.message_handler(state=State.waiting_delete_url)
+async def add_product(message: types.Message, state: FSMContext):
+    await state.update_data(deleted_url=message.text, encoding ="utf-8")
+
+   #типа удаление
+    #
+    #
+    #
+    await message.answer("Товар удален")
+    await state.finish()
+
+
+
+@dp.message_handler(lambda message: message.text == "Посмотреть товары")
+async def watch_all_product(message: types.Message):
+    ##Типа сбор инфы из бд
+    await message.answer("Типа вывод ссылок")
 def run_bot():
     executor.start_polling(dp)
 
