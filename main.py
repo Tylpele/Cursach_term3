@@ -1,6 +1,6 @@
-from telegram_bot import *
+import telegram_bot
 
 if __name__ == '__main__':
-    run_bot()
+    telegram_bot.run_bot()
 
 

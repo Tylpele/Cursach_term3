@@ -1,5 +1,8 @@
 from main_parser import *
 from aiogram import Bot, types, Dispatcher, executor
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 # def run_bot():
 #
@@ -26,12 +29,19 @@ from aiogram import Bot, types, Dispatcher, executor
 
 TOKEN_API = "5634121116:AAEE-utFMkGewUNOOKPAKv-ai89ogJL8a3c"
 bot = Bot(TOKEN_API)
-dp = Dispatcher(bot)
+dp = Dispatcher(bot, storage=MemoryStorage()) #разрешение боту юзать оперативку или как-то так
+storage = MemoryStorage() # доступ к опративки в целом для машины состояний
 
+
+class State(StatesGroup):
+    waiting_add_url= State()
 
 # команда /start
 @dp.message_handler(commands=['start'])
 async def begin(message: types.Message):
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, selective=True) #cоздание кнопки
+    btn_add = types.KeyboardButton("Добавить товар") #текст кнопки
+    keyboard.add(btn_add) #добавление кнопки на клавиатуру
     await bot.send_message(message.chat.id, "Привет!\n"
                                             "\n"
                                             "Этот бот поможет вам отслеживать изменение цен на товары. Нажмите \"Добавить товар\",\n"
@@ -43,7 +53,8 @@ async def begin(message: types.Message):
                                             "Aliexpress, e2e4, Citilink, Wildberries, Ozon.\n"
                                             "В будущем список будет пополняться.\n"
                                             "\n"
-                                            "Ссылки типа bit.ly, goo.gl и другие сокращенные ссылки считываться <b>не</b> будут.", parse_mode="HTML")
+                                            "Ссылки типа bit.ly, goo.gl и другие сокращенные ссылки считываться <b>не</b> будут.", parse_mode="HTML", reply_markup=keyboard)
+
 
 
 # отправка уведомления
@@ -81,5 +92,26 @@ async def send_notification(user_id, link, price: int, prev_price: int):
 # кнопка "удалить товар"
 # ?
 
+#НЕ ТРОГАТЬ задания состоянния для ожидания url
+@dp.message_handler(lambda message: message.text == "Добавить товар") #обработка нажатия кнопки по её тексту
+async def state_add_url(message: types.Message, state: FSMContext):
+    await message.reply("Какой товар вы хотите добавить?") #что отошлет бот когда переходит в состояния ожидания
+    await state.set_state(State.waiting_add_url.state) #сам переход в состояние ожидания
+
+#ТРОГАТЬ добавление именно в txt файл url
+@dp.message_handler(state=State.waiting_add_url) #запуск функции из-за состояния НЕ ТРОГАТЬ
+async def add_product(message: types.Message, state: FSMContext): #НЕ ТРОГАТЬ
+    await state.update_data(new_url=message.text, encodig ="utf-8")# сбор текста из сообщения НЕ ТРОГАТЬ
+    #ВОТ ЭТО НАДО ТРОГАТЬ
+    #запись в файл
+    new_url=message.text+"\n"
+    with open("URl.txt", "a+", encoding="utf-8") as url_file:
+        url_file.write(f"{new_url}")
+    await message.answer("Товар добавлен") #сообщение об успешной записи куда-то
+    await state.finish() #завершения состояния НЕ ТРОГАТЬ
+
 def run_bot():
     executor.start_polling(dp)
+
+
+
