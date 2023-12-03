@@ -1,8 +1,8 @@
 dynamic_dic = {
     "wildberries": [["price-block__content", "price-block__final-price"], ["product-page__header-wrap", "h1"]],
     "ozon": [["mj", "l0l.z8k"], ["e0", "h1"]],
-    "megamarket": [["sales-block-offer-price sales-block-offer-price_active", "psales-block-offer-price__price-final"],
-                   ["pdp-header", "h1"]]
+    "megamarket": [["sales-block-offer-price__price-final", "sales-block-offer-price__price-final"],
+                   ["pdp-header", "pdp-header"]]
 }
 
 static_dic = {
@@ -15,3 +15,4 @@ static_dic = {
     "citilink": [["span", "e1j9birj0 e106ikdt0 app-catalog-1f8xctp e1gjr6xo0"],
                  ["h1", "e1ubbx7u0 eml1k9j0 app-catalog-tn2wxd e1gjr6xo0"]]
 }
+
