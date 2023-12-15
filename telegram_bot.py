@@ -25,11 +25,11 @@ class State(StatesGroup):
 # команда /start
 @dp.message_handler(commands=['start'])
 async def begin(message: types.Message):
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, selective=True)  # cоздание кнопки
-    btn_add = types.KeyboardButton("Добавить товар")  # текст кнопки
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, selective=True)
+    btn_add = types.KeyboardButton("Добавить товар")
     btn_delete = types.KeyboardButton("Удалить товар")
     btn_watch_product = types.KeyboardButton("Посмотреть товары")
-    keyboard.add(btn_add)  # добавление кнопки на клавиатуру
+    keyboard.add(btn_add)
     keyboard.add(btn_delete, btn_watch_product)
     await bot.send_message(message.chat.id, "Привет!\n"
                                             "\n"
@@ -73,8 +73,7 @@ async def send_notifications_periodically():
 async def send_notification(user_id, product_name, link, price: int, prev_price: int):
     markup = InlineKeyboardMarkup()
 
-    btn_cancel_notification = InlineKeyboardButton("❌ Отменить отслеживание", callback_data="btn_cancel_notification",
-                                                   switch_inline_query_current_chat='❌')
+    btn_cancel_notification = InlineKeyboardButton("❌ Отменить отслеживание", callback_data="btn_cancel_notification")
     markup.add(btn_cancel_notification)
 
     if prev_price - price > 0:
@@ -85,27 +84,19 @@ async def send_notification(user_id, product_name, link, price: int, prev_price:
         await bot.send_message(user_id,
                                f"Товар \"{product_name}\" теперь стоит <b>{price}₽</b> ({link}). <i>(пред. цена {prev_price}₽)</i>. "
                                f"Цена повысилась на {price - prev_price}₽.", parse_mode="HTML", reply_markup=markup)
-    else:
-        await bot.send_message(user_id,
-                               f"Товар \"{product_name}\" теперь стоит <b>{price}₽</b> ({link}). <i>(пред. цена {prev_price}₽)</i>. "
-                               f"Цена товара не изменилась", parse_mode="HTML",
-                               reply_markup=markup)
 
 
 # обработка кнопки отмены отслеживания уведомлений
 @dp.callback_query_handler(lambda c: c.data == "btn_cancel_notification")
-async def cancel_btn_click(callback_query: types.CallbackQuery):
+async def cancel_notification_btn_click(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
     # получения текста сообщения, к которому прикреплена кнопка
     text_with_link = callback_query.message.text
     # поиск в сообщении ссылки
     link = re.search(r'\((.*?)\)', text_with_link).group(1)
 
-    if not is_product_added_db(user_id, link):
-        await callback_query.message.reply("Товара нет в списке отслеживаемых")
-        return
+    delete_product_from_db(user_id, link)
 
-    delete_product_from_bd(user_id, link)
     await callback_query.message.reply("Товар больше не отслеживается")
 
 
@@ -120,7 +111,7 @@ async def state_add_url(message: types.Message):
 
 # кнопка отмены ожидания ссылки в добавлении товара на стадии ожидания url
 @dp.callback_query_handler(lambda c: c.data == "btn_cancel_add", state=State.waiting_add_url)
-async def cancel_add(callback_query: types.CallbackQuery, state: FSMContext):
+async def cancel_add_url(callback_query: types.CallbackQuery, state: FSMContext):
     await callback_query.message.reply("Операция отменена")
     await state.finish()
 
@@ -132,19 +123,22 @@ async def add_url(message: types.Message, state: FSMContext):
     markup.add(btn_cancel_add_price)
     url = message.text
 
-    if is_correct_link(url) is False:
+    # привод ссылок к общему виду
+    new_url = make_standart_link(url)
+
+    if is_correct_link(new_url) is False:
         await message.answer("Данного сайта нет в базе или ссылка некорректна")
         await state.finish()
         return
 
     await state.set_state(State.waiting_min_price.state)
-    await state.update_data(url=url)
+    await state.update_data(url=new_url)
     await message.answer("Введите цену товара, которая бы Вас устроила:", reply_markup=markup)
 
 
 # кнопка отмены ожидания ссылки в добавлении товара на стадии ожидания мин цены
 @dp.callback_query_handler(lambda c: c.data == "btn_cancel_add_price", state=State.waiting_min_price)
-async def cancel_add(callback_query: types.CallbackQuery, state: FSMContext):
+async def cancel_add_price(callback_query: types.CallbackQuery, state: FSMContext):
     await callback_query.message.reply("Операция отменена")
     await state.finish()
 
@@ -167,23 +161,20 @@ async def get_min_price(message: types.Message, state: FSMContext):
 
     await message.answer("Запрос обрабатывается")
 
-    # привод ссылок к общему виду
-    new_url = make_standart_link(url)
-
-    if is_product_added_db(user_id, new_url):
+    if is_product_added_db(user_id, url):
         await message.answer("Товар уже был ранее добавлен")
         await state.finish()
         return
 
-    price = get_product_price(new_url)
-    product_name = get_product_name(new_url)
+    price = get_product_price(url)
+    product_name = get_product_name(url)
 
     if price is None or product_name is None:
         await message.answer("Данные с сайта не парсятся. Попробуйте еще раз позже")
         await state.finish()
         return
 
-    add_product_to_db(user_id, new_url, product_name, price, min_price, message.date.time())
+    add_product_to_db(user_id, url, product_name, price, min_price, message.date.time())
 
     await message.answer("Товар добавлен")
     await state.finish()
@@ -193,9 +184,10 @@ async def get_min_price(message: types.Message, state: FSMContext):
 async def state_delete_url(message: types.Message, state: FSMContext):
     markup = InlineKeyboardMarkup()
     btn_cancel_delete = InlineKeyboardButton("Отмена", callback_data="btn_cancel_delete")
-    btn_delete_all_product = InlineKeyboardButton("❌ Удалить ВСЕ товары ❌", callback_data="btn_delete_all_product", switch_inline_query_current_chat='❌')
+    btn_delete_all_product = InlineKeyboardButton("❌ Удалить ВСЕ товары ❌", callback_data="btn_delete_all_product")
     markup.add(btn_delete_all_product)
     markup.add(btn_cancel_delete)
+
     product_list = get_product_list(message.from_user.id)
     await state.update_data(product_list=product_list)
 
@@ -207,36 +199,37 @@ async def state_delete_url(message: types.Message, state: FSMContext):
     reply = "<b>Какой товар Вы хотите перестать отслеживать?</b> (Введите номер товара, который Вы хотите удалить)\n\n"
 
     for i in range(len(product_list)):
-        reply += f"{i + 1}. {product_list[i][0]}: <i>{product_list[i][1]}₽</i> ({product_list[i][2]})\n" \
+        reply += f"{i + 1}. {product_list[i][0]}: <b>{product_list[i][1]}₽</b> ({product_list[i][2]})\n" \
                  f"- Предпочитаемая цена: {product_list[i][3]}₽\n"
 
     await message.reply(reply, parse_mode="HTML", disable_web_page_preview=True, reply_markup=markup)
     await state.set_state(State.waiting_delete_url.state)
 
 
-#потдверждение удаление всех товорово
+# подтверждение удаления всех товаров
 @dp.callback_query_handler(lambda c: c.data == "btn_delete_all_product", state=State.waiting_delete_url)
 async def confirm_delete_all_product(callback_query: types.CallbackQuery):
     markup = InlineKeyboardMarkup()
-    btn_conf_delete_all = InlineKeyboardButton("✅ Да", callback_data="btn_conf_delete_all", switch_inline_query_current_chat='✅')
-    btn_cancel_delete_all = InlineKeyboardButton("❌ Нет ", callback_data="btn_cancel_delete_all", switch_inline_query_current_chat='❌')
+    btn_conf_delete_all = InlineKeyboardButton("✅ Да", callback_data="btn_conf_delete_all")
+    btn_cancel_delete_all = InlineKeyboardButton("❌ Нет ", callback_data="btn_cancel_delete_all")
     markup.add(btn_conf_delete_all, btn_cancel_delete_all)
-    await callback_query.message.reply("Вы уверены?", reply_markup=markup)
+    await callback_query.message.reply("Вы уверены? Это действие нельзя будет отменить", reply_markup=markup)
 
 
-#отмена удаления всех товаров
+# отмена удаления всех товаров
 @dp.callback_query_handler(lambda c: c.data == "btn_cancel_delete_all", state=State.waiting_delete_url)
 async def cancel_delete_all_product(callback_query: types.CallbackQuery, state: FSMContext):
     await callback_query.message.reply("Операция отменена")
     await state.finish()
 
 
+# удаление всех товаров
 @dp.callback_query_handler(lambda c: c.data == "btn_conf_delete_all", state=State.waiting_delete_url)
-async def cancel_delete_all_product(callback_query: types.CallbackQuery, state: FSMContext):
-    user_id=callback_query.from_user.id
+async def delete_all_product(callback_query: types.CallbackQuery, state: FSMContext):
+    user_id = callback_query.from_user.id
     product_list = get_product_list(user_id)
     for i in range(len(product_list)):
-        delete_product_from_bd(user_id, product_list[i][2])
+        delete_product_from_db(user_id, product_list[i][2])
     await callback_query.message.reply("Все товары удалены")
     await state.finish()
 
@@ -244,8 +237,11 @@ async def cancel_delete_all_product(callback_query: types.CallbackQuery, state: 
 @dp.message_handler(state=State.waiting_delete_url.state)
 async def delete_product(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
+    markup = InlineKeyboardMarkup()
+    btn_cancel_delete = InlineKeyboardButton("Отмена", callback_data="btn_cancel_delete")
+    markup.add(btn_cancel_delete)
     if not message.text.isdigit():
-        await message.answer("Некорректный номер. Введите еще раз:")
+        await message.answer("Некорректный номер. Введите еще раз:", reply_markup=markup)
         return
 
     product_num = int(message.text)
@@ -253,18 +249,13 @@ async def delete_product(message: types.Message, state: FSMContext):
     data = await state.get_data()
     product_list = data.get("product_list")
 
-    if product_num == 0:
-        await message.answer("Отменено.")
-        await state.finish()
-        return
-
     if product_num > len(product_list) or product_num < 1:
-        await message.answer("Некорректный номер. Введите еще раз:")
+        await message.answer("Некорректный номер. Введите еще раз:", reply_markup=markup)
         return
 
     link = product_list[product_num - 1][2]
 
-    delete_product_from_bd(user_id, link)
+    delete_product_from_db(user_id, link)
 
     await message.answer("Товар удален")
     await state.finish()

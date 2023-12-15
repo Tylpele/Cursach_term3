@@ -3,12 +3,15 @@ from datetime import time, timedelta, datetime
 
 
 def make_sql_query(query: str, params):
-    connection = pymysql.connect(
-        host='127.0.0.1',
-        user='root',
-        password='root',
-        database='price_bot'
-    )
+    try:
+        connection = pymysql.connect(
+            host='127.0.0.1',
+            user='root',
+            password='root',
+            database='price_bot'
+        )
+    except:
+        raise ConnectionError("Ошибка подключения к базе данных")
 
     cursor = connection.cursor()
 
@@ -26,7 +29,7 @@ def add_product_to_db(user_id, link, product_name, price: int, min_price: int, _
                    (user_id, link, product_name, price, min_price, _time))
 
 
-def delete_product_from_bd(user_id, link):
+def delete_product_from_db(user_id, link):
     make_sql_query("DELETE FROM old_price WHERE tag = %s AND link = %s", (user_id, link))
 
 

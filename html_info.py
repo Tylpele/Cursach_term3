@@ -28,12 +28,11 @@ def is_correct_link(url):
     return website_name in correct_sites
 
 
-def make_standart_link(new_url):
-    if not new_url.startswith("https://www.") and not new_url.startswith("http://www."):
-        if not new_url.startswith("www."):
-            if not new_url.startswith("https://"):
-                return "https://www." + new_url
-            return new_url
-        return "https://" + new_url
+def make_standart_link(url):
+    # чтобы не возникало ошибок с "https://www"
+    if url.startswith("www."):
+        url = url.replace("www.", "", 1)
 
-    return new_url
+    parsed_url = urlparse(url)
+
+    return f"https://{parsed_url.netloc}{parsed_url.path}"
